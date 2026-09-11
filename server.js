@@ -7,34 +7,52 @@ const PORT = process.env.PORT || 3000;
 app.get('/probabili', async (req, res) => {
   let browser;
   try {
+    // Avvio ottimizzato per ambienti Cloud/Render
     browser = await puppeteer.launch({
       headless: "new",
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--no-first-run',
+        '--no-zygote',
+        '--disable-gpu'
+      ]
     });
 
     const page = await browser.newPage();
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+    
+    // User-Agent aggiornato
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
 
+    // Timeout e navigazione
     await page.goto('https://www.fantacalcio.it/probabili-formazioni-serie-a', {
-      waitUntil: 'networkidle2',
-      timeout: 60000
+      waitUntil: 'domcontentloaded',
+      timeout: 45000
     });
 
+    // Attesa caricamento elementi
+    await page.waitForSelector('.card-player, .player-card, .player', { timeout: 10000 }).catch(() => {});
+
+    // Estrazione dati generica e flessibile
     const probabili = await page.evaluate(() => {
       let risultati = [];
-      const carteGiocatori = document.querySelectorAll('.player-card, .card-player');
+      const carte = document.querySelectorAll('[class*="player"]');
 
-      carteGiocatori.forEach(card => {
-        const nomeEl = card.querySelector('.player-name, .name');
-        const percEl = card.querySelector('.player-percentage, .percentage');
+      carte.forEach(card => {
+        const testo = card.innerText || "";
+        const matchPerc = testo.match(/(\d{1,3})\s*%/);
 
-        if (nomeEl && percEl) {
-          let nome = nomeEl.innerText.trim();
-          let percText = percEl.innerText.replace('%', '').trim();
-          let perc = parseInt(percText);
-
-          if (nome && !isNaN(perc)) {
-            risultati.push({ nome: nome, percentuale: perc });
+        if (matchPerc) {
+          const perc = parseInt(matchPerc[1]);
+          // Estrae la prima riga di testo come nome del giocatore
+          const righe = testo.split('\n').map(r => r.trim()).filter(r => r.length > 0 && !r.includes('%'));
+          if (righe.length > 0 && perc >= 0 && perc <= 100) {
+            risultati.push({
+              nome: righe[0],
+              percentuale: perc
+            });
           }
         }
       });
@@ -47,7 +65,8 @@ app.get('/probabili', async (req, res) => {
 
   } catch (error) {
     if (browser) await browser.close();
-    res.status(500).json({ success: false, error: error.toString() });
+    console.error("Errore Scraping:", error);
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
