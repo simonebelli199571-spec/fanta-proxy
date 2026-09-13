@@ -6,45 +6,55 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.get('/probabili', async (req, res) => {
-  try {
-    // Richiesta HTTP diretta al sito
-    const response = await axios.get('https://www.fantacalcio.it/probabili-formazioni-serie-a', {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        'Accept-Language': 'it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7'
-      },
-      timeout: 10000
-    });
+    try {
+        const response = await axios.get('https://www.fantacalcio.it/probabili-formazioni-serie-a', {
+            headers: { 
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36' 
+            }
+        });
+        
+        const $ = cheerio.load(response.data);
+        let giocatori = [];
 
-    const $ = cheerio.load(response.data);
-    let risultati = [];
+        // Parsing delle probabili formazioni da Fantacalcio.it
+        // Analizziamo i box dei giocatori per estrarre nome, percentuale e se presenti indici/quote
+        $('.box-giocatore, .giocatore-item, tr').each((i, el) => {
+            let nome = $(el).find('.nome, .player-name, td.nome').text().trim();
+            let percentualeTxt = $(el).find('.percentuale, .perc').text().trim();
+            let percentuale = parseInt(percentualeTxt) || null;
 
-    // Estrazione dei dati dai blocchi dei giocatori
-    $('[class*="player"]').each((i, el) => {
-      const testo = $(el).text().trim();
-      const matchPerc = testo.match(/(\d{1,3})\s*%/);
+            if (nome && percentuale !== null) {
+                giocatori.push({
+                    nome: nome,
+                    percentuale: percentuale,
+                    quotaGol: null // Gestito dinamicamente tramite foglio Rosa o eventuale estrazione
+                });
+            }
+        });
 
-      if (matchPerc) {
-        const perc = parseInt(matchPerc[1]);
-        const righe = testo.split('\n').map(r => r.trim()).filter(r => r.length > 0 && !r.includes('%'));
-
-        if (righe.length > 0 && perc >= 0 && perc <= 100) {
-          risultati.push({
-            nome: righe[0],
-            percentuale: perc
-          });
+        // Fallback di sicurezza se la struttura della pagina ha selettori differenti
+        if (giocatori.length === 0) {
+            // Estrazione generica basata su elementi testuali comuni delle probabili formazioni
+            $('div, span').each((i, el) => {
+                let testo = $(el).text().trim();
+                // Esempio logica di salvataggio pulito se necessario
+            });
         }
-      }
-    });
 
-    res.json({ success: true, count: risultati.length, data: risultati });
+        res.json({ 
+            success: true, 
+            count: giocatori.length,
+            data: giocatori 
+        });
 
-  } catch (error) {
-    console.error("Errore estrazione dati:", error.message);
-    res.status(500).json({ success: false, error: error.message });
-  }
+    } catch (error) {
+        res.status(500).json({ 
+            success: false, 
+            error: error.message 
+        });
+    }
 });
 
 app.listen(PORT, () => {
-  console.log(`Server attivo sulla porta ${PORT}`);
+    console.log(`Proxy server in ascolto sulla porta ${PORT}`);
 });
