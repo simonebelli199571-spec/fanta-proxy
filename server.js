@@ -16,35 +16,30 @@ app.get('/probabili', async (req, res) => {
         const $ = cheerio.load(response.data);
         let giocatori = [];
 
-        // Parsing delle probabili formazioni da Fantacalcio.it
-        // Analizziamo i box dei giocatori per estrarre nome, percentuale e se presenti indici/quote
-        $('.box-giocatore, .giocatore-item, tr').each((i, el) => {
-            let nome = $(el).find('.nome, .player-name, td.nome').text().trim();
-            let percentualeTxt = $(el).find('.percentuale, .perc').text().trim();
-            let percentuale = parseInt(percentualeTxt) || null;
+        // Scansiona tutti i box dei giocatori presenti nelle probabili formazioni
+        $('.player-item, .field-player, tr, .box-giocatore').each((i, el) => {
+            let nome = $(el5 = $(el)).find('.name, .nome-giocatore, strong').first().text().trim();
+            let percTxt = $(el).find('.percentage, .percentuale').text().trim();
+            
+            // Estrae i numeri dalla percentuale (es. "80%")
+            let percentuale = parseInt(percTxt.replace(/[^0-9]/g, '')) || null;
 
-            if (nome && percentuale !== null) {
+            if (nome && nome.length > 2 && percentuale !== null) {
                 giocatori.push({
                     nome: nome,
                     percentuale: percentuale,
-                    quotaGol: null // Gestito dinamicamente tramite foglio Rosa o eventuale estrazione
+                    quotaGol: null
                 });
             }
         });
 
-        // Fallback di sicurezza se la struttura della pagina ha selettori differenti
-        if (giocatori.length === 0) {
-            // Estrazione generica basata su elementi testuali comuni delle probabili formazioni
-            $('div, span').each((i, el) => {
-                let testo = $(el).text().trim();
-                // Esempio logica di salvataggio pulito se necessario
-            });
-        }
+        // Seleziona univocamente rimuovendo i duplicati
+        let unici = Array.from(new Map(giocatori.map(item => [item.nome.toLowerCase(), item])).values());
 
         res.json({ 
             success: true, 
-            count: giocatori.length,
-            data: giocatori 
+            count: unici.length,
+            data: unici 
         });
 
     } catch (error) {
